@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>失落的学生 - 情绪处理教学版</title>
+    <style>
+        :root {
+            --bg-dark: #1a1a2e;
+            --panel-bg: rgba(255, 255, 255, 0.08);
+            --text-main: #e0e0e0;
+            --accent-blue: #3498db;
+            --accent-green: #2ecc71;
+            --accent-red: #e74c3c;
+            --accent-warm: #d35400;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0; height: 100%;
+            font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background-color: var(--bg-dark); color: var(--text-main);
+            overflow: hidden;
+        }
+
+        #game-interface { display: none;
+            height: 100vh; width: 100vw; transition: background 1.5s ease;
+        }
+
+        #main-view { flex: 3;
+            display: flex; flex-direction: column; padding: 40px; position: relative;
+        }
+        #level-indicator { font-size: 14px;
+            color: var(--accent-blue); letter-spacing: 2px; margin-bottom: 10px;
+        }
+        #scene-title { font-size: 28px; margin-bottom: 20px;
+            font-weight: bold;
+        }
+
+        #visual-canvas {
+            flex-grow: 1;
+            background: #0f3443; border-radius: 20px;
+            display: flex; justify-content: center; align-items: flex-start; /* 已修复：由 center 改为 flex-start 防止内容溢出遮挡 */
+            position: relative; overflow-y: auto; padding: 20px;
+            box-shadow: inset 0 0 50px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        #student-avatar { font-size: 18px; text-align: left; line-height: 1.8; max-width: 90%; padding-top: 10px; /* 已修复：增加顶部填充 */
+        }
+        #action-area { height: 280px; display: flex; flex-direction: column; justify-content: center; gap: 12px;
+            margin-top: 20px; }
+
+        .choice-btn {
+            background: var(--panel-bg);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: white; padding: 15px 20px; border-radius: 10px;
+            text-align: left; cursor: pointer; transition: all 0.3s;
+            font-size: 15px;
+            width: 100%;
+        }
+        .choice-btn:hover:not(:disabled) { background: rgba(255,255,255,0.2); transform: translateX(10px); border-color: var(--accent-blue);
+        }
+        .choice-btn:disabled { opacity: 0.6; cursor: not-allowed;
+        }
+
+        .feedback-box {
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 15px; padding: 25px;
+            margin-top: 10px; border-left: 5px solid var(--accent-green);
+        }
+
+        .reason-title { 
+            color: var(--accent-green);
+            font-weight: bold;
+            margin-bottom: 15px;
+            font-size: 24px;
+            border-bottom: 2px solid rgba(46, 204, 113, 0.3);
+            padding-bottom: 5px;
+            display: inline-block;
+        }
+        .reason-content { 
+            font-size: 18px;
+            line-height: 1.8;
+            color: #ffffff;
+            white-space: pre-line;
+        }
+
+        #status-sidebar {
+            flex: 1;
+            background: rgba(0,0,0,0.3); padding: 30px;
+            display: flex; flex-direction: column; gap: 25px;
+            border-left: 1px solid rgba(255,255,255,0.1);
+        }
+        .status-item { background: rgba(255,255,255,0.05); padding: 15px; border-radius: 12px;
+        }
+        .status-label { font-size: 13px; color: #888; margin-bottom: 10px; display: flex; justify-content: space-between;
+        }
+        .progress-bg { width: 100%; height: 6px; background: #333; border-radius: 3px;
+        }
+        .progress-fill { height: 100%; border-radius: 3px;
+            transition: width 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+
+        .filter-warm { background-color: #3e2723 !important;
+        }
+        .filter-red { background-color: #421010 !important;
+        }
+
+        #system-toast {
+            position: fixed;
+            top: 20px; left: 50%; transform: translateX(-50%);
+            padding: 12px 30px; border-radius: 50px; display: none; z-index: 3000;
+            font-weight: bold;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+
+        .overlay {
+            position: fixed;
+            inset: 0; background: var(--bg-dark);
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            z-index: 2000; padding: 40px;
+        }
+
+        #instruction-overlay { text-align: left;
+            align-items: flex-start; max-width: 800px; margin: 0 auto;
+            overflow-y: auto; }
+        .rule-card { background: rgba(255,255,255,0.05);
+            padding: 20px; border-radius: 15px; margin-bottom: 20px;
+            width: 100%; box-sizing: border-box; }
+        .rule-card h3 { color: var(--accent-blue); margin-top: 0;
+            border-bottom: 1px solid rgba(52, 152, 219, 0.3); padding-bottom: 8px; }
+        .rule-card p { font-size: 15px;
+            line-height: 1.6; margin: 10px 0; }
+        .highlight { color: var(--accent-green); font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+<div id="system-toast">提示内容</div>
+
+<div id="start-overlay" class="overlay">
+    <h1 style="font-size: 48px; margin-bottom: 10px;">失落的学生</h1>
+    <p style="color: #888; margin-bottom: 40px;">—— 唯有灵魂的共鸣，方能开启紧闭的心门 ——</p>
+    <button class="choice-btn" style="width: 200px; text-align: center;"
+onclick="showInstructions()">挑战教学</button>
+</div>
+
+<div id="instruction-overlay" class="overlay" style="display: none;">
+    <div style="max-width: 700px; margin: 0 auto;">
+        <h2 style="text-align: center; color: var(--accent-green); margin-bottom: 30px;">📖 游戏使用说明书</h2>
+        
+        <div class="rule-card">
+            <h3>第一部分：游戏规则</h3>
+            <p>• <b>背景设定</b>：你将扮演一名教师，面对因考试崩溃而紧闭心门的 Samantha。</p>
+            <p>• <b>核心目标</b>：你需要通过四次关键抉择，化解 Samantha 的心理危机，获得最终的 <span class="highlight">“灵魂捕手”</span> 勋章。</p>
+            <p>• <b>成功判定</b>：只有当师生信任度达到 <span class="highlight">100%</span> 时才视为挑战成功。任何低于此分数的结局均视为挑战失败。</p>
+        </div>
+
+  
+      <div class="rule-card">
+            <h3>第二部分：通关原则与核心动作</h3>
+            <p>在做出选项前，请务必理解每一关的核心逻辑：</p>
+            <p>1.
+<b>暂停·接纳</b>：情绪崩溃时，核心动作是<span class="highlight">立即停止教学</span>，允许沉默和哭泣。</p>
+            <p>2.
+<b>分享·共情</b>：核心动作是<span class="highlight">分享真实的脆弱经历</span>，通过深度共鸣驱散学生的孤独感。</p>
+            <p>3.
+<b>重构·转译</b>：核心动作是捕捉努力证据，将能力问题<span class="highlight">转译为策略或其他问题</span>，移除羞耻感。</p>
+            <p>4.
+<b>赋能·重启</b>：核心动作是<span class="highlight">颠覆失败的意义</span>，将考试定义为寻找遗漏的工具而非能力的审判。</p>
+        </div>
+
+        <button class="choice-btn" style="width: 100%; text-align: center; margin-top: 20px; background: var(--accent-green);"
+onclick="beginGame()">我已阅读并理解规则，开始挑战</button>
+    </div>
+</div>
+
+<div id="game-interface">
+    <div id="main-view">
+        <div id="level-indicator">LEVEL 01</div>
+        <div id="scene-title">游戏加载中...</div>
+        <div id="visual-canvas">
+            <div id="student-avatar">正在接入 Samantha 的远程会议终端...</div>
+        </div>
+        <div id="action-area"></div>
+    </div>
+
+    <div id="status-sidebar">
+        <h3 style="margin-top: 0;">Samantha 的状态</h3>
+        <div class="status-item">
+
+            <div class="status-label">情绪压力 <span id="val-stress">95%</span></div>
+            <div class="progress-bg"><div id="bar-stress" class="progress-fill" style="background: var(--accent-red); width: 95%;"></div></div>
+        </div>
+        <div class="status-item">
+            <div class="status-label">师生信任度 <span id="val-trust">60%</span></div>
+            <div class="progress-bg"><div id="bar-trust" class="progress-fill" style="background: var(--accent-green); width: 60%;"></div></div>
+        </div>
+       
+<div class="status-item">
+            <div class="status-label">心墙厚度 <span id="val-wall">100%</span></div>
+            <div class="progress-bg"><div id="bar-wall" class="progress-fill" style="background: #95a5a6;
+width: 100%;"></div></div>
+        </div>
+        <div class="status-item">
+            <div class="status-label">知识吸收率 <span id="val-absorb">0%</span></div>
+            <div class="progress-bg"><div id="bar-absorb" class="progress-fill" style="background: var(--accent-blue);
+width: 0%;"></div></div>
+        </div>
+        <div style="margin-top: auto;
+color: #555;">
+            距离下课还有: <span id="timer" style="color: #aaa;">30:00</span>
+        </div>
+    </div>
+</div>
+
+<script>
+    let state = {
+        level: 1,
+        stress: 95,
+        trust: 60,
+        wall: 100,
+        absorb: 0,
+        time: 30,
+        isGameOver: false,
+
+        history: [] // 记录每关的选择
+    };
+
+    const scriptData = {
+        1: {
+            title: "第一关：黄金 3 秒的抉择",
+            desc: "Samantha 埋着头，肩膀剧烈地抖动着，泪水一滴滴落在试卷上，一阵阵抽泣声传到老师的耳朵里。",
+            correctReason: `【第一步 暂停·接纳】（按下暂停键，创造安全容器）\n原则：情绪崩溃时，认知脑已宕机。首要任务是停止施压，提供无条件的情感接纳。\n关键动作：\n1. 立即暂停：通过动作表明“此刻，你比课程更重要”。\n2. 语言锚定：使用“老师听得出你现在很难受”进行情绪确认。\n3. 允许存在：给予沉默和哭泣的空间。\n禁忌：急于解决问题、说教、否定情绪。`,
+            options: [
+          
+      { text: "[ A ] “Samantha，先收收情绪。模拟考的意义就是发现问题，哭解决不了问题。这道几何压轴题非常关键，我们把它讲完，化悲愤为力量。”", type: "bad", feedback: "严重的共情缺失！信任值大幅跌落。" },
+                { text: "[ B ] “别哭啦，这点小事不值得哈，我当年模考数学也很差，我不也挺过来了吗？咱们坚强点。”", type: "neutral", feedback: "无效安慰，她感到了被敷衍。" },
+                { text: "[ C ] “Samantha，老师听得出你很难受。我们这节课先暂停，我陪你静静待会儿。”", type: "good", feedback: "正确：你的耐心初步松动了她的心墙。" }
+            ]
+        },
+        2: {
+   
+         title: "第二关：隔空的守候",
+            desc: "空气静默了一分钟。Samantha 停止了抽泣，但依然没有开口，反复折叠试卷。",
+            correctReason: `【第二步：分享·共情】（深度共鸣，驱散孤独感）\n原则：通过适度共情，让学生感到“我不是一个人”，建立情感联结。\n关键动作：\n1. 分享脆弱：分享自己真实的、失败经历。 \n2. 描述感受：帮助学生理解并确认自己的情绪。\n3. 深度联结：将师生置于情感共同体中。\n禁忌：虚假安慰、泛泛而谈、塑造完美形象。`,
+            options: [
+                { text: "[ A ] “感觉好点了吗？我们的进度已经落后了，离下课还有 20 分钟，哪怕讲一半也好，我们先把这组三角函数公式过一遍。”", type: "bad", feedback: "急躁的教学节奏彻底破坏了刚建立的信任。" },
+                { text: "[ B ] “Samantha，你是不是最近压力太大？还是觉得我讲课的方式听不懂？跟我说说，老师看有什么能帮到你。”", type: "neutral", feedback: "过度的询问让她再次陷入沉默。" },
+                { text: "[ C ] “其实看着你难受我也挺心疼。我以前考砸了也会躲起来哭，那种‘努力了却没结果’的无力感，确实很难受。”", type: "good", feedback: "自我暴露的力量！她感受到了平等的共情。" }
+   
+         ]
+        },
+        3: {
+            title: "第三关：逻辑的缝隙",
+            desc: "她终于开口，声音沙哑：“我是不是真的很笨？复习到凌晨两点，可一上考场脑子里就成了荒漠。”",
+            correctReason: `【第三步：重构·转译】（认知升维，改变问题视角）\n原则：用新的“思维模型”替换学生消极的自我认知。\n关键动作：\n1. 捕捉关键：抓住学生话语中的“努力证据”。\n2. 重新定义：将问题从“能力缺陷”升维为“生理或策略问题”，移除羞羞耻感。\n禁忌：空洞鼓励（“你很聪明”）、直接反驳（“你才不笨”）。`,
+            options: [
+                { text: "[ A ] “你只是太紧张了，别瞎想。你的智商绝对没问题，下次只要心态稳住，一定能发挥好。你要对自己有信心！”", type: "bad", feedback: "否定她的痛苦（'别瞎想'）是最危险的沟通方式。" },
+                { text: "[ B ] “你当时是完全没思路，还是在计算的时候卡住了？老师帮你一起看看那些让你卡壳的题，下次不出错就好了。”", type: "neutral", feedback: "依然停留在解决问题层面，而非情感层面。" },
+                { text: "[ C ] “凌晨两点？那是大脑在疲惫状态下的自我保护。就好比手机没电了黑屏，这不是你笨，而是它需要休息。”", type: "good", feedback: "去罪化成功！她放下了对自我的攻击。" }
+       
+     ]
+        },
+        4: {
+            title: "第四关：失落的拼图 (终局)",
+            desc: "她情绪平复了很多，但小声问：“老师，那如果下周模拟……我还是考砸了怎么办？”",
+            correctReason: `【第四步：赋能·重启】（行动锚定，指向未来希望）\n原则：将新的认知转化为面向未来的、具体的行动视角，注入希望。\n关键动作：\n1. 接纳最坏假设：不否认失败的可能性。\n2. 颠覆意义框架：用积极隐喻，颠覆“考试”的恐怖叙事。\n3. 赋予新使命：将恐惧转化为主动探索的动力。\n禁忌：虚假保证（“你下次一定考好”）、枯燥的方法说教。`,
+            options: [
+                { text: "[ A ] “别怕，接下来的每一天我都会给你加练。只要你按我给你的计划走，我保证你的成绩会稳步回升。”", type: "neutral", feedback: "负责任但缺乏灵魂的引导。" },
+                { text: "[ B ] “考砸了就再来。考试本身就是一种抗压测试。如果你连模拟都害怕，那考试你怎么办？”", type: "bad", feedback: "最后时刻的回马枪！她彻底崩溃。" },
+                { text: "[ C ] “那就太好了。模拟是用来找遗漏的，发现的问题越多，咱们努力的方向就越明确。”", type: "good", feedback: "完美的视角转化！" }
+      
+      ]
+        }
+    };
+
+ function updateUI() {
+        const clamp = (val) => Math.min(Math.max(val, 0), 100);
+document.getElementById('val-stress').innerText = clamp(state.stress) + "%";
+        document.getElementById('bar-stress').style.width = clamp(state.stress) + "%";
+        document.getElementById('val-trust').innerText = clamp(state.trust) + "%";
+        document.getElementById('bar-trust').style.width = clamp(state.trust) + "%";
+document.getElementById('val-wall').innerText = clamp(state.wall) + "%";
+        document.getElementById('bar-wall').style.width = clamp(state.wall) + "%";
+        document.getElementById('val-absorb').innerText = clamp(state.absorb) + "%";
+        document.getElementById('bar-absorb').style.width = clamp(state.absorb) + "%";
+document.getElementById('timer').innerText = state.time + ":00";
+    }
+
+    function showToast(msg, isGood) {
+        const toast = document.getElementById('system-toast');
+toast.innerText = msg;
+        toast.style.background = isGood ? "var(--accent-green)" : "var(--accent-red)";
+        toast.style.display = "block";
+        setTimeout(() => toast.style.display = "none", 3000);
+}
+
+    function renderLevel() {
+        if (state.isGameOver || state.level > 4) return;
+const data = scriptData[state.level];
+        document.getElementById('level-indicator').innerText = "LEVEL 0" + state.level;
+        document.getElementById('scene-title').innerText = data.title;
+        document.getElementById('student-avatar').innerText = data.desc;
+        const actionArea = document.getElementById('action-area');
+actionArea.innerHTML = "";
+        data.options.forEach((opt) => {
+            const btn = document.createElement('button');
+            btn.className = "choice-btn";
+            btn.innerText = opt.text;
+            btn.onclick = () => handleChoice(opt);
+            actionArea.appendChild(btn);
+        });
+}
+
+    function handleChoice(opt) {
+        if(state.isGameOver) return;
+        const data = scriptData[state.level];
+// 记录选择历史用于最后总结
+        state.history.push({
+            level: state.level,
+            text: opt.text,
+            type: opt.type,
+            feedback: opt.feedback
+        });
+const container = document.getElementById('game-interface');
+        if (opt.type === "good") {
+            container.className = "filter-warm";
+state.trust += 12; state.stress -= 15; state.wall -= 25; state.absorb += 15;
+            showToast("选择正确！", true);
+} else if (opt.type === "bad") {
+            container.className = "filter-red";
+state.trust -= 40; state.stress += 20; state.wall += 30;
+            showToast("选择不佳！", false);
+} else {
+            container.className = "";
+            state.trust -= 25;
+state.stress += 5;
+            showToast("反应平平...", false);
+        }
+        state.time -= 5;
+        updateUI();
+if (state.trust <= 0) {
+            state.isGameOver = true;
+setTimeout(() => {
+                const summary = summarizeErrors();
+                endGame("挑战失败！结局：【冰冷的陌生人】", summary); 
+            }, 1000);
+return;
+        }
+        showDeepAnalysis(opt, data);
+}
+
+    function showDeepAnalysis(userOpt, levelData) {
+        const actionArea = document.getElementById('action-area');
+const avatar = document.getElementById('student-avatar');
+        actionArea.innerHTML = "";
+        let analysisHtml = `<div class="feedback-box">`;
+if (userOpt.type !== "good") {
+            const correctOpt = levelData.options.find(o => o.type === "good");
+// 逻辑顺序：1. 错误反馈 2. 正确选项 3. 原因解释
+            analysisHtml += `<div style="color:var(--accent-red); margin-bottom:10px; font-weight:bold;">❌ 错误反馈：${userOpt.feedback}</div>`;
+analysisHtml += `<div style="color:var(--accent-green); margin-bottom:15px; font-size:16px;">💡 正确选项应该是：<br>${correctOpt.text}</div>`;
+        } else {
+            analysisHtml += `<div style="color:var(--accent-green); margin-bottom:15px; font-size:16px;">✨ 完美共情！${userOpt.feedback}</div>`;
+}
+        
+        analysisHtml += `<div class="reason-title">为什么这是正确动作？</div><div class="reason-content">${levelData.correctReason}</div></div>`;
+avatar.innerHTML = analysisHtml;
+        avatar.parentElement.scrollTop = 0;
+
+        const nextBtn = document.createElement('button');
+        nextBtn.className = "choice-btn";
+        nextBtn.disabled = true;
+        actionArea.appendChild(nextBtn);
+let timeLeft = 10;
+        const timerId = setInterval(() => {
+            nextBtn.innerText = `深度吸收中... (${timeLeft}s)`;
+            timeLeft--;
+            if (timeLeft < 0) {
+                clearInterval(timerId);
+                nextBtn.innerText = state.level >= 4 ? "查看最终评价" : "进入下一关";
+       
+        nextBtn.disabled = false;
+                nextBtn.style.borderColor = "var(--accent-green)";
+                nextBtn.onclick = () => {
+                    state.level++;
+                    document.getElementById('game-interface').className = "";
+         
+          if (state.level > 4) { calculateEnd(); } else { renderLevel(); }
+                };
+            }
+        }, 1000);
+}
+
+    function summarizeErrors() {
+        const errors = state.history.filter(h => h.type !== 'good');
+if (errors.length === 0) return "你在每一关都做出了完美的共情抉择。";
+        
+        let html = `<div style="margin-top:20px; border-top:1px solid rgba(255,255,255,0.1); padding-top:10px;">`;
+        html += `<h4 style="color:var(--accent-red)">错误选项回顾：</h4>`;
+
+errors.forEach(e => {
+            html += `<p style="font-size:14px; margin-bottom:8px;"><span style="color:var(--accent-blue)">Level 0${e.level}:</span> ${e.feedback}</p>`;
+        });
+html += `</div>`;
+        return html;
+    }
+
+    function calculateEnd() {
+        let result = "";
+let status = "挑战失败！";
+        const summary = summarizeErrors();
+
+        if (state.trust >= 100) {
+            status = "挑战成功！";
+result = "【灵魂捕手】\n唯有完美的共情，才能换来此刻的救赎。你成为了她生命里的光。";
+            endGame(status + "\n" + result, "");
+        } else {
+            if (state.trust > 60) {
+                result = "【负责的讲师】\n课程顺利结束，但你只是一个路过她生命并提供帮助的陌生人。你未能在共情上达到极致。";
+} else {
+                result = "【知识的搬运工】\n她勉强听完了课，但对你的信任已降至冰点。你的共情能力尚待磨炼。";
+}
+            endGame(status + "\n" + result, summary);
+}
+    }
+
+    function endGame(title, summary) {
+        const avatar = document.getElementById('student-avatar');
+const actionArea = document.getElementById('action-area');
+        
+        avatar.innerHTML = `
+            <div style="text-align:center;">
+                <h2 style="font-size:32px; color:${title.includes('成功') ? 'var(--accent-green)' : 'var(--accent-red)'}">${title.split('\n')[0]}</h2>
+                <p style="font-size:18px; margin:20px 0; line-height:1.6;">${title.split('\n')[1] || ''}</p>
+                ${summary}
+            </div>
+        `;
+        
+        actionArea.innerHTML = `
+            <button class="choice-btn" style="text-align:center; background:var(--accent-green); border:none;" 
+            onclick="location.reload()">再次挑战</button>
+        `;
+    }
+
+    function showInstructions() {
+        document.getElementById('start-overlay').style.display = "none";
+        document.getElementById('instruction-overlay').style.display = "flex";
+    }
+
+    function beginGame() {
+        document.getElementById('instruction-overlay').style.display = "none";
+        document.getElementById('game-interface').style.display = "flex";
+        updateUI();
+        renderLevel();
+    }
+</script>
+
+</body>
+</html>
